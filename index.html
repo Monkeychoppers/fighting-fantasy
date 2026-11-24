@@ -336,7 +336,7 @@ select { background: var(--hull); color: var(--ink); border: 1px solid var(--lin
     <p class="note" id="tts-unavailable" hidden>This browser can't read aloud.</p>
     <div class="field toggle"><label for="set-tts">Read each section aloud</label><input type="checkbox" id="set-tts"></div>
     <div class="field toggle"><label for="set-choices">Read the choices aloud too</label><input type="checkbox" id="set-choices"></div>
-    <div class="field"><label for="voice">Voice</label><select id="voice"></select><button class="small-btn" id="test-voice">Test voice</button><p class="note">Better voices: on iPhone go to Settings, Accessibility, Spoken Content, Voices, English, and download a Premium or Enhanced voice (try Jamie, Serena or Daniel). Then reopen this page and it picks the best one automatically.</p></div>
+    <div class="field"><label for="voice">Voice</label><select id="voice"></select><button class="small-btn" id="test-voice">Test voice</button><p class="note" id="voice-info"></p><p class="note">Better voices: on iPhone go to Settings, Accessibility, Spoken Content, Voices, English, and download a Premium or Enhanced voice (try Jamie, Serena or Daniel). Then fully close this app (swipe it away) and open it again.</p></div>
     <div class="field"><label for="rate">Speed <span id="rate-out">1.0×</span></label><input type="range" id="rate" min="0.7" max="1.4" step="0.1"></div>
     <div class="field"><span class="lbl">Text size</span>
       <div class="seg" role="radiogroup" aria-label="Text size">
@@ -468,16 +468,30 @@ const LOCK = {"salt": "P8Jlp2uEO7cXM+Vr4ZjS5w==", "iters": 600000, "index": "09F
   // ---------- speech ----------
   const synth = 'speechSynthesis' in window ? window.speechSynthesis : null;
   let voices = [];
-  const NOVELTY = /compact|eloquence|novelty|bells|bubbles|bad news|boing|cellos|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox|albert|fred|junior|ralph|kathy|grandpa|grandma|rocko|shelley|sandy|reed|flo|eddy/i;
+  // joke voices only (Bells, Zarvox...). Real iPhone voices such as Reed, Flo or Sandy stay in the list.
+  const NOVELTY = /^(bad news|bahh|bells|boing|bubbles|cellos|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox|albert|hysterical)\b/i;
+  // iPhones often put the quality only in the voice's hidden id (com.apple.voice.premium.en-GB.Jamie), not its name
+  const quality = v => { const k = v.name + ' ' + v.voiceURI; return /premium/i.test(k) ? 'Premium' : /enhanced|neural|natural/i.test(k) ? 'Enhanced' : ''; };
+  let voiceTries = 0;
   function loadVoices() {
     if (!synth) return;
-    const score = v => (/premium/i.test(v.name) ? 0 : /enhanced|neural|natural/i.test(v.name) ? 1 : 2) * 10 + (/en-GB/i.test(v.lang) ? 0 : /en-(IE|AU)/i.test(v.lang) ? 1 : 2);
-    voices = synth.getVoices().filter(v => /^en/i.test(v.lang) && !NOVELTY.test(v.name)).sort((a, b) => score(a) - score(b));
+    const all = synth.getVoices();
+    const score = v => ({ Premium: 0, Enhanced: 1 }[quality(v)] ?? 2) * 10 + (/en.GB/i.test(v.lang) ? 0 : /en.(IE|AU)/i.test(v.lang) ? 1 : 2);
+    const seen = new Set();
+    voices = all.filter(v => /^en/i.test(v.lang) && !NOVELTY.test(v.name) && !seen.has(v.voiceURI) && seen.add(v.voiceURI))
+      .sort((a, b) => score(a) - score(b) || a.name.localeCompare(b.name));
     const sel = $('#voice'); if (!sel) return;
     sel.innerHTML = '';
     const auto = document.createElement('option'); auto.value = ''; auto.textContent = 'Automatic (best installed voice)'; sel.appendChild(auto);
-    voices.forEach(v => { const o = document.createElement('option'); o.value = v.voiceURI; o.textContent = v.name + ' (' + v.lang + ')'; sel.appendChild(o); });
+    voices.forEach(v => { const o = document.createElement('option'); o.value = v.voiceURI; const q = quality(v);
+      o.textContent = v.name.replace(/\s*\((premium|enhanced)\)/i, '') + (q ? ' · ' + q : '') + ' (' + v.lang + ')'; sel.appendChild(o); });
     sel.value = settings.voice || '';
+    const good = voices.filter(quality).length;
+    const info = $('#voice-info');
+    if (info) info.textContent = 'This phone is giving the app ' + all.length + ' voices: ' + voices.length + ' English, '
+      + good + ' of them Premium or Enhanced.' + (all.length && !good ? ' If you have downloaded Premium voices and none show here, Apple is not sharing them with web apps.' : '');
+    // iPhones hand over their voice list late and in pieces: keep asking for a few seconds
+    if (voiceTries < 10) { voiceTries++; setTimeout(loadVoices, 600); }
   }
   if (synth) { loadVoices(); synth.onvoiceschanged = loadVoices; }
   const pickVoice = () => voices.find(v => v.voiceURI === settings.voice) || voices[0] || null;
@@ -655,6 +669,7 @@ const LOCK = {"salt": "P8Jlp2uEO7cXM+Vr4ZjS5w==", "iters": 600000, "index": "09F
       $('#endings-head').textContent = B.title + ' · ' + found.size + ' of ' + E.ENDINGS.length + ' found';
     }
     if (name === 'crew') renderCrew();
+    if (name === 'settings') { voiceTries = 0; loadVoices(); }
     document.querySelectorAll('.sheet').forEach(s => { s.hidden = s.id !== 'sheet-' + name; });
     $('#scrim').hidden = false;
     const c = $('#sheet-' + name + ' .sheet-close'); if (c) c.focus();
