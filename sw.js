@@ -1,5 +1,5 @@
-// Fighting Fantasy offline cache, version f6c37b4c72
-const CACHE = 'ff-f6c37b4c72';
+// Fighting Fantasy offline cache, version 5bec3df53c
+const CACHE = 'ff-5bec3df53c';
 const CORE = ['./', 'index.html', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE && k !== 'ff-art').map(k => caches.delete(k)))).then(() => self.clients.claim())); });
